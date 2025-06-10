@@ -1,60 +1,114 @@
-# Repository: gwas-eqtl
+# Promoter/enhancer enrichment to match that of Mostafavi et al., 2023
 
-This repository contains scripts used for the analyses in the article "Systematic differences in discovery of genetic effects on gene expression and complex traits" (https://doi.org/10.1038/s41588-023-01529-1). Throughout, data files are used that are deposited on Zenodo with the DOI 10.5281/zenodo.6618073. Some files are zipped and need to be decompressed.
+### Bradley May 2025
 
-## Directories and Scripts
+## Code
 
-### gene_annotations
+Code was obtained from author's github (<https://github.com/hakha-most/gwas_eqtl.git>)
 
-Scripts to compile various gene-level annotations that are used by codes in other directories.
+## Data
 
-### gwas_process
+snp annotations were obtained from the author's zenodo `wget https://zenodo.org/records/6618073/files/snp_annotations.zip?download=1 -O snp_annotations.zip`
 
-Scripts to download GWAS sumstats from the Neale lab website, and extract and LD clump the GWAS hits per trait.
+## Overview of approach
 
-### eqtl_process
+1.  Annotate each eQTL by the minimum resolution at which an effect has been obtained (done during plotting scripts)
+2.  Convert these positions --\> GRCh37
+3.  Sample 1000 hits per resolution, using the LD blocks previously defined (Berisa and Pickrell 2016), sample 1000 other variants, per hit (bootstapped hits)
+4.  For each lead variant, calculate 1000 matched snps using the author's code (control)
+5.  Quantify the overlap of bootstrapped hits and control snps with the FANTOM and ENCODE genomic annotations
 
-Scripts that perform LD clumping on GTEx eQTLs per gene per tissue.
+### 1. Annotating eQTLs by min resolution
 
-### gwas_props
+This was carried out during plotting of eQTLs. See code below:
 
-Scripts to compute a range of SNP and gene properties of GWAS hits.
+```         
+save = cond_all # Conditional eQTLs mapped to phenotype clump indexes
 
-### eqtl_props
+df.count.sig.egenes <- save %>% 
+  mutate(Gene_class = factor(case_when(biotype == 'protein_coding' ~ 'Protein coding',
+                                       biotype == 'lncRNA' ~ 'lncRNA',
+                                       TRUE ~ 'Other'),
+                             levels = c('Other', 'lncRNA', 'Protein coding'))) %>% 
+  arrange(Level) %>% 
+  distinct(!!sym(distinction), .keep_all = TRUE) 
 
-Scripts to compute a range of SNP and gene properties of eQTLs.
+level_seperation = df.count.sig.egenes %>% distinct(!!sym(distinction), annotation, annotation_type)
+  level_seperation = level_seperation %>% 
+    rowwise() %>% 
+    mutate(index = unlist(strsplit(phenotype_clump_index, "\\-"))[c(F,T)]) %>% 
+    select(phenotype_clump_index, annotation_type) %>% 
+    filter(!is.na(index))
 
-### model_simulations
+write.table(level_seperation, paste0("eqtl_out/eqtl_seperation_for_promoter_enhancer_enrichment_.txt"), row.names=F, quote=F, sep = "\t")
+```
 
-Scripts to plot simulation results under the model of GWAS and eQTL discovery, as described in the main text.
+### 2. Converting eQTLs to GRCh37
 
-### extended_gwas_analyses
+The same chain file as used by the author's was downloaded from <https://zenodo.org/records/6618073/files/auxiliary_files.zip?download=1>
 
-Scripts to extend the GWAS analyses as presented in Section 1.1 of the Supplementary Note.
+```         
+# Get the chain file
+wget https://zenodo.org/records/6618073/files/auxiliary_files.zip?download=1
 
-### extended_eqtl_analyses
+# Get liftover software
 
-Scripts to extend the eQTL analyses as presented in Section 1.2 of the Supplementary Note.
+# Convert the variant IDs to GRCh37 positions
+```
 
-### other_qtls
+### 3. Sampling and bootstrapping hits
 
-Scripts to explore the properties of molecular QTLs other than standard eQTLs, as related to Supplementary Note, Section 1.3.
+For this, we are sampling variants from the LD blocks where we also find hits for each level
 
-### colocalization
+```         
+levels=("Cell type" "Major population" "All Cells")
+for level in "${levels[@]}"; do
+  for i in {1..1000}; do
+    bash .... 'Rscript gwas_eqtl/eqtl_props/02_bootstrap_hits.R ${i} "${level}"'
+  done
+done
+```
 
-Scripts to explore the properties of blood-trait GWAS hits and to analyze their colocalization with blood eQTLs, as related to Supplementary Note, Section 5.2.
+### 4. Getting a set of matched snps
 
-## Execution Order
+For each group, select the variants and identify 1000 matched variants based on their LDscore, MAF and gene density (which may vary for each set - so saving this too)
 
-Below is the execution order for the directories and scripts corresponding to the order of analyses presented in the paper. All codes within directories are numbered according to execution order.
+```         
+levels=("Cell type" "Major population" "All Cells")
+for level in "${levels[@]}"; do
+  bash .... 'Rscript gwas_eqtl/eqtl_props/03_match_SNPs.R "${level}"'
+done
+```
 
-1. **gene_annotations**: Compile gene annotations.
-2. **gwas_process**: Generate data to be analyzed in step 4.
-3. **eqtl_process**: Generate data to be analyzed in step 5.
-4. **gwas_props**: GWAS properties presented in Figs. 2-5.
-5. **eqtl_props**: eQTL properties presented in Figs. 2-5.
-6. **model_simulations**: Simulation analyses presented in Fig. 6 and Supplementary Note, Sections 3 and 4.
-7. **extended_gwas_analyses**: GWAS analyses presented in Supplementary Note, Section 1.1.
-8. **extended_eqtl_analyses**: eQTL analyses presented in Supplementary Note, Section 1.2.
-9. **other_qtls**: QTL analyses presented in Supplementary Note, Section 1.3.
-10. **colocalization**: Colocalization analyses presented in Supplementary Note, Section 5.
+### 5. Calculating enrichment scores
+
+For each group, and each of hits and matched snps, calculate the enrichment score
+
+```         
+levels=("Cell type" "Major population" "All Cells")
+hit_or_match=("hit" "match")
+for level in "${levels[@]}"; do
+  for hm in "${hit_or_match[@]}"; do
+    bash .... 'Rscript gwas_eqtl/eqtl_props/06_calc_promoter_enhancer_props.R "${level}" "${hm}"'
+  done
+done
+```
+
+### 6. Calculating confidence intervals and results
+
+Gather the results and compute confidence intervals
+
+```         
+levels=("Cell type" "Major population" "All Cells")
+for level in "${levels[@]}"; do
+  bash .... 'Rscript gwas_eqtl/eqtl_props/06_extract_promoter_enhancer_enrichments_CI.R "${level}"'
+done
+```
+
+##### TEMP
+
+Get a list of test variants for the analysis by sampling the snp
+
+```         
+bash getting_test_variants.sh #Already in GRCh37
+```

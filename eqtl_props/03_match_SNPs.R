@@ -1,10 +1,12 @@
 
 ## Script for obtaining control SNPs matched for MAF, LD score and gene density
 
-args <- commandArgs(TRUE)
-snplist <- args[1] #list of SNPs for which matches are found, i.e. all eQTL SNPs
+args <- commandArgs(TRUE) 
+group <- args[1] # group = "Cell type"
+print(paste0("group=", group))
+snplist <- "temp/sampled_ready.txt" #list of SNPs for which matches are found, i.e. all eQTL SNPs TESTING
 info_file="snp_annotations/filter_snps.txt"
-outfile="eqtl_props/eqtl.match_snps.txt"
+outfile=paste0("eqtl_props_out/", gsub("\\ ", "\\-", group), ".match_snps.txt")
 
 #====
 
@@ -20,18 +22,32 @@ l2_interval=sd(d_info$L2)/10
 
 #====
 
-dg=fread(snplist,header=F)
-colnames(dg)="SNP"
+dg=fread(snplist,header=T) %>% 
+  filter(annotation_type == group) %>% 
+  rowwise() %>% 
+  mutate(
+    SNP = unlist(strsplit(phenotype_clump_index, "\\-"))[c(F,T)]
+  ) %>% 
+  select(SNP)
+
 
 dg=dg[dg$SNP %in% d_info$SNP,]
 d_data=left_join(dg,d_info,by="SNP")
+d_data = d_data[complete.cases(d_data),]
+
+# Save the per-snp results
+write.table(
+  d_data %>% mutate(group = group) %>% select(-c(d_tss, gene)),
+  file=gsub(".match_snps.txt", ".snps.txt", outfile)
+  ,quote = FALSE,sep=",",row.names = F,col.names=T)
 
 #====
-
-x=paste0("V",as.character(1:1000)) #1000 instances of matching
+NBOOT=1000  #1000 instances of matching
+x=paste0("V",as.character(1:NBOOT))
 d_match=t(data.frame(x))
 colnames(d_match)=x
 d_match=d_match[-1,]
+
 
 #iterate over SNPs
 for (i in 1:nrow(d_data)){
@@ -52,7 +68,7 @@ for (i in 1:nrow(d_data)){
   d_temp$l2_diff=abs(d_temp$L2-l2_temp)
   d_temp=d_temp[d_temp$l2_diff<l2_interval,]
 
-  d_pick=t(data.frame(d_temp[sample(1:nrow(d_temp),1000,replace=T),]$SNP))
+  d_pick=t(data.frame(d_temp[sample(1:nrow(d_temp),NBOOT,replace=T),]$SNP))
   rownames(d_pick)=i; colnames(d_pick)=x
   d_match=rbind(d_match,d_pick)
   

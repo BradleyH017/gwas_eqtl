@@ -7,11 +7,15 @@ library(data.table)
 library(tidyverse)
 library(dplyr)
 
-eqtlfile="eqtl_props/eqtl.promoter_enhancer.enrichments"
-bootfile="eqtl_props/eqtl_boot.promoter_enhancer.enrichments" # same as "eqtlfile", but computed and concatenated 1000 times for 1000 bootstrapped samples
-eqtlfile_match="eqtl_props/eqtl_matched.promoter_enhancer.enrichments" # same as "eqtlfile", but computed and concatenated 1000 times for 1000 instances of matched SNPs
+args <- commandArgs(TRUE) 
+group <- args[1] # group = "Cell type"
+groupf = gsub("\\ ", "\\-", group)
+eqtlfile=paste0("eqtl_props_out/promoter_enhancer.", groupf, ".actual.enrichments")
+bootfile=paste0("eqtl_props_out/promoter_enhancer.", groupf, ".hit.enrichments") # same as "eqtlfile", but computed and concatenated 1000 times for 1000 bootstrapped samples
+eqtlfile_match=paste0("eqtl_props_out/promoter_enhancer.", groupf, ".match.enrichments") # same as "eqtlfile", but computed and concatenated 1000 times for 1000 instances of matched SNPs
+outfile=paste0("eqtl_props_out/promoter_enhancer.",groupf,".enrichment.CI")
 
-d_eqtl=fread(eqtlfile,sep=",")
+d_eqtl=fread(eqtlfile,sep=",") 
 d_boot=fread(bootfile,sep=",")
 d_eqtl_match=fread(eqtlfile_match,sep=",")
 
@@ -59,9 +63,9 @@ d_all_match=calc_CI_mean(d_eqtl_match)
 
 d1=d_all[rownames(d_all) %in% rownames(d_all_match),]
 d1$annot=rownames(d1)
-d1$cat="eQTL"
+d1$cat=groupf
 d_all_match$annot=rownames(d_all_match)
-d_all_match$cat="eQTL_matched"
+d_all_match$cat=paste0(groupf,".matched")
 
 d_props=rbind(d1,d_all_match)
 

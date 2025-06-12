@@ -71,23 +71,30 @@ $lo -bedPlus=7 temp/temp_output.bed auxiliary_files/hg38ToHg19.over.chain.gz tem
 
 # Add new variant id col and simplify
 awk -F'\t' '{
-    gsub("/", ":", $4)  # Replace "/" with ":" in variant
+    sub(/^chr/, "", $1)           # Remove "chr" prefix
+    gsub("/", ":", $4)            # Replace "/" with ":"
     b37_variant = $1":"$3":"$4
     print b37_variant"\t"$8" "$9"\t"$10
 }' temp/output_hg19.bed > temp/output_hg19_clean.tsv
 echo -e "b37_variant\tannotation_type\tphenotype_clump_index" | cat - temp/output_hg19_clean.tsv > temp/output_hg19_final.tsv
-
+# Final format is b37_variant, annotation_type, phenotype_clump_index
 ```
 
 ### 3. Sampling and bootstrapping hits
 
 For this, we are sampling variants from the LD blocks where we also find hits for each level
 
-```         
-levels=("Cell type" "Major population" "All Cells")
+```  
+mkdir -p logs       
+MEM=3000
+levels=("Cell_type" "Major_population" "All_Cells")
 for level in "${levels[@]}"; do
   for i in {1..1000}; do
-    bash .... 'Rscript gwas_eqtl/eqtl_props/02_bootstrap_hits.R ${i} "${level}"'
+    bsub -J "sample_hits-${level}-${i}" -M"$MEM" -R"select[mem>$MEM] rusage[mem=$MEM] span[hosts=1]" -G team152 \
+      -e logs/sample_hits-${level}-${i}-stderr \
+      -o logs/sample_hits-${level}-${i}-stdout \
+      "Rscript eqtl_props/02_bootstrap_hits.R $i $level> \
+      logs/process_sample_hits-${level}-${i}.Rout"
   done
 done
 ```
@@ -97,9 +104,13 @@ done
 For each group, select the variants and identify 1000 matched variants based on their LDscore, MAF and gene density (which may vary for each set - so saving this too)
 
 ```         
-levels=("Cell type" "Major population" "All Cells")
+levels=("Cell_type" "Major_population" "All_Cells")
 for level in "${levels[@]}"; do
-  bash .... 'Rscript gwas_eqtl/eqtl_props/03_match_SNPs.R "${level}"'
+   bsub -J "get_matched-${level}" -M"$MEM" -R"select[mem>$MEM] rusage[mem=$MEM] span[hosts=1]" -G team152 \
+      -e logs/get_matched-${level}-stderr \
+      -o logs/get_matched-${level}-stdout \
+      "Rscript eqtl_props/03_match_SNPs.R $level> \
+      logs/get_matched-${level}.Rout"
 done
 ```
 

@@ -2,9 +2,9 @@
 ## Script for obtaining control SNPs matched for MAF, LD score and gene density
 
 args <- commandArgs(TRUE) 
-group <- args[1] # group = "Cell type"
+group <- gsub("\\_", "\\ ", args[1]) # Do this within group:  group = "Cell type"
 print(paste0("group=", group))
-snplist <- "temp/sampled_ready.txt" #list of SNPs for which matches are found, i.e. all eQTL SNPs TESTING
+snplist <- "temp/output_hg19_final.tsv" #list of SNPs for which matches are found, i.e. all eQTL SNPs TESTING
 info_file="snp_annotations/filter_snps.txt"
 outfile=paste0("eqtl_props_out/", gsub("\\ ", "\\-", group), ".match_snps.txt")
 
@@ -26,7 +26,7 @@ dg=fread(snplist,header=T) %>%
   filter(annotation_type == group) %>% 
   rowwise() %>% 
   mutate(
-    SNP = unlist(strsplit(phenotype_clump_index, "\\-"))[c(F,T)]
+    SNP = b37_variant
   ) %>% 
   select(SNP)
 

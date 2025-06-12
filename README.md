@@ -49,11 +49,34 @@ The same chain file as used by the author's was downloaded from <https://zenodo.
 
 ```         
 # Get the chain file
-wget https://zenodo.org/records/6618073/files/auxiliary_files.zip?download=1
+wget https://zenodo.org/records/6618073/files/auxiliary_files.zip?download=1 -O auxiliary_files.zip
+unzip auxiliary_files.zip
+rm auxiliary_files.zip
 
-# Get liftover software
+# Convert the input file to bed format (keep the annotation_type column as this is required for division of leads in the subsequent scripts)
+awk -F'\t' 'NR > 1 {
+    split($2, v, ":")
+    chrom = v[1]
+    pos = v[2] - 1
+    end = v[2]
+    ref = v[3]
+    alt = v[4]
+    print chrom"\t"pos"\t"end"\t"ref"/"alt"\t0\t.\t1\t"$3"\t"$4
+}' temp/gene_level_seperation.txt > temp/temp_output.bed
+# Assuming 3rd and 4th columns are 'annotation_type' and 'phenotype_clump_index'
 
-# Convert the variant IDs to GRCh37 positions
+# Convert using liftover
+lo=/software/team152/bh18/liftOver
+$lo -bedPlus=7 temp/temp_output.bed auxiliary_files/hg38ToHg19.over.chain.gz temp/output_hg19.bed temp/unmapped.bed
+
+# Add new variant id col and simplify
+awk -F'\t' '{
+    gsub("/", ":", $4)  # Replace "/" with ":" in variant
+    b37_variant = $1":"$3":"$4
+    print b37_variant"\t"$8" "$9"\t"$10
+}' temp/output_hg19.bed > temp/output_hg19_clean.tsv
+echo -e "b37_variant\tannotation_type\tphenotype_clump_index" | cat - temp/output_hg19_clean.tsv > temp/output_hg19_final.tsv
+
 ```
 
 ### 3. Sampling and bootstrapping hits

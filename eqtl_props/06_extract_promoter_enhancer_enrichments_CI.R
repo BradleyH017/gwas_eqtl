@@ -8,7 +8,7 @@ library(tidyverse)
 library(dplyr)
 
 args <- commandArgs(TRUE) 
-group <- args[1] # group = "Cell type"
+group <- gsub("\\_", "\\ ", args[1]) # group = "Cell type"
 groupf = gsub("\\ ", "\\-", group)
 eqtlfile=paste0("eqtl_props_out/promoter_enhancer.", groupf, ".actual.enrichments")
 bootfile=paste0("eqtl_props_out/promoter_enhancer.", groupf, ".hit.enrichments") # same as "eqtlfile", but computed and concatenated 1000 times for 1000 bootstrapped samples
@@ -72,6 +72,7 @@ d_props=rbind(d1,d_all_match)
 #####
 
 write.table(d_props,file=outfile,quote=F,sep=",",row.names=F)
+print("..DONE!")
 
 
 

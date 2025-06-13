@@ -11,9 +11,9 @@ library(tidyverse)
 library(dplyr)
 
 args <- commandArgs(TRUE) 
-group <- args[1] # group = "Cell type"
+group <- gsub("\\_", "\\ ", args[1])  # group = "Cell type"
 hit_or_match = args[2] # hit_or_match="hit"
-eqtlfile="temp/sampled_ready.txt" # TESTING
+eqtlfile="temp/output_hg19_final.tsv" # TESTING
 print(paste0("hit_or_match=", as.character(hit_or_match)))
 print(paste0("group=", group))
 infofile="snp_annotations/promoter_enhancer.counts"
@@ -23,7 +23,7 @@ d_info=fread(infofile)
 
 # Construct eqtl file from hits or matches
 if(hit_or_match == "hit"){
-  hitfs = list.files("eqtl_props_out", pattern = paste0(gsub("\\ ", "\\-", group), ".boot*"), full=TRUE)
+  hitfs = list.files("eqtl_props_out", pattern = paste0(gsub("\\ ", "\\-", group), ".boot"), full=TRUE)
   d_eqtl_list = lapply(hitfs, function(x){
     read.delim(x) %>% 
       select(SNP)
@@ -53,10 +53,7 @@ write.table(enrichments,file=outfile,quote=F,sep=",",row.names=F)
 if(hit_or_match == "hit"){
  d_eqtl=fread(eqtlfile) %>% 
    filter(annotation_type == !!(group)) %>% 
-   rowwise() %>% 
-   mutate(
-     SNP = unlist(strsplit(phenotype_clump_index, "\\-"))[c(F,T)]
-   )
+   mutate(SNP=b37_variant)
  d_eqtl_annots=left_join(d_eqtl %>% select(SNP),d_info,by="SNP")
  d_eqtl_annots = d_eqtl_annots[complete.cases(d_eqtl_annots), ]
  p1=sapply(d_eqtl_annots %>% select(-SNP), function(x) length(x[x>0])/length(x) ) # Actual hit mean

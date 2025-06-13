@@ -40,7 +40,7 @@ level_seperation = df.count.sig.egenes %>% distinct(!!sym(distinction), annotati
     select(phenotype_clump_index, annotation_type) %>% 
     filter(!is.na(index))
 
-write.table(level_seperation, paste0("eqtl_out/eqtl_seperation_for_promoter_enhancer_enrichment_.txt"), row.names=F, quote=F, sep = "\t")
+write.table(level_seperation, paste0("eqtl_out/eqtl_seperation_per_res_", distinction, "_.txt"), row.names=F, quote=F, sep = "\t")
 ```
 
 ### 2. Converting eQTLs to GRCh37
@@ -54,20 +54,24 @@ unzip auxiliary_files.zip
 rm auxiliary_files.zip
 
 # Convert the input file to bed format (keep the annotation_type column as this is required for division of leads in the subsequent scripts)
+mkdir -p temp
+f=/lustre/scratch127/humgen/projects_v2/sc-eqtl-ibd/analysis/bradley_analysis/IBDverse/IBDVerse-sc-eQTL-code/eqtl_out/eqtl_seperation_per_res_phenotype_clump_index_.txt
 awk -F'\t' 'NR > 1 {
-    split($2, v, ":")
+    split($1, v, ":")
     chrom = v[1]
     pos = v[2] - 1
     end = v[2]
     ref = v[3]
     alt = v[4]
-    print chrom"\t"pos"\t"end"\t"ref"/"alt"\t0\t.\t1\t"$3"\t"$4
-}' temp/gene_level_seperation.txt > temp/temp_output.bed
-# Assuming 3rd and 4th columns are 'annotation_type' and 'phenotype_clump_index'
+    print chrom"\t"pos"\t"end"\t"ref"/"alt"\t0\t.\t1\t"$4"\t"$2
+}' $f  > temp/temp_output.bed
+# Columns on end are 'annotation_type' and 'phenotype_clump_index'
 
 # Convert using liftover
 lo=/software/team152/bh18/liftOver
 $lo -bedPlus=7 temp/temp_output.bed auxiliary_files/hg38ToHg19.over.chain.gz temp/output_hg19.bed temp/unmapped.bed
+wc -l temp/unmapped.bed
+# 440 unmapped variants
 
 # Add new variant id col and simplify
 awk -F'\t' '{
@@ -85,7 +89,8 @@ echo -e "b37_variant\tannotation_type\tphenotype_clump_index" | cat - temp/outpu
 For this, we are sampling variants from the LD blocks where we also find hits for each level
 
 ```  
-mkdir -p logs       
+mkdir -p logs
+mkdir -p eqtl_props_out    
 MEM=3000
 levels=("Cell_type" "Major_population" "All_Cells")
 for level in "${levels[@]}"; do
@@ -102,8 +107,10 @@ done
 ### 4. Getting a set of matched snps
 
 For each group, select the variants and identify 1000 matched variants based on their LDscore, MAF and gene density (which may vary for each set - so saving this too)
+(Can be submit concurrently with the previous job)
 
-```         
+```   
+MEM=3000      
 levels=("Cell_type" "Major_population" "All_Cells")
 for level in "${levels[@]}"; do
    bsub -J "get_matched-${level}" -M"$MEM" -R"select[mem>$MEM] rusage[mem=$MEM] span[hosts=1]" -G team152 \
@@ -117,13 +124,19 @@ done
 ### 5. Calculating enrichment scores
 
 For each group, and each of hits and matched snps, calculate the enrichment score
+(Submit after step 4.)
 
 ```         
-levels=("Cell type" "Major population" "All Cells")
+MEM=10000
+levels=("Cell_type" "Major_population" "All_Cells")
 hit_or_match=("hit" "match")
 for level in "${levels[@]}"; do
   for hm in "${hit_or_match[@]}"; do
-    bash .... 'Rscript gwas_eqtl/eqtl_props/06_calc_promoter_enhancer_props.R "${level}" "${hm}"'
+    bsub -J "get_CI-${level}-${hm}" -M"$MEM" -R"select[mem>$MEM] rusage[mem=$MEM] span[hosts=1]" -G team152 \
+      -e logs/get_CI-${level}-${hm}-stderr \
+      -o logs/get_CI-${level}-${hm}-stdout \
+      "Rscript eqtl_props/06_calc_promoter_enhancer_props.R $level $hm> \
+      logs/get_CI-${level}-${hm}.Rout"
   done
 done
 ```
@@ -132,17 +145,18 @@ done
 
 Gather the results and compute confidence intervals
 
-```         
-levels=("Cell type" "Major population" "All Cells")
+```   
+levels=("Cell_type" "Major_population" "All_Cells")
 for level in "${levels[@]}"; do
-  bash .... 'Rscript gwas_eqtl/eqtl_props/06_extract_promoter_enhancer_enrichments_CI.R "${level}"'
+  Rscript eqtl_props/06_extract_promoter_enhancer_enrichments_CI.R $level
 done
 ```
 
-##### TEMP
+### 7. Summarise the results
 
-Get a list of test variants for the analysis by sampling the snp
+Collate the results and produce a figure for enrichments
+(Submit after step 5)
 
-```         
-bash getting_test_variants.sh #Already in GRCh37
+```
+Rscript eqtl_props/999_make_promoter_enhancer_figs.R
 ```

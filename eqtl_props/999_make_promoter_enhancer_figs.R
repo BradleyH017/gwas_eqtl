@@ -74,3 +74,75 @@ ggsave(paste0(out,"/bar_enrichment.pdf"),
 
 
 # Express this as enhancers relative to promoters
+encode_ref = res %>% filter(annot_group == "ENCODE" & annot == "Promoter-like") %>% rename(refcat = cat)
+fantom_ref = res %>% filter(annot_group == "FANTOM" & annot == "Promoter") %>% rename(refcat = cat)
+
+normres <- res %>%
+    group_by(annot_group, cat) %>%
+    rowwise() %>% 
+    mutate(
+        reference_mean = ifelse(annot_group == "ENCODE", encode_ref[encode_ref$refcat == cat,]$mean, fantom_ref[fantom_ref$refcat == cat,]$mean),
+        mean_normalised = mean / reference_mean
+    )
+  
+ggplot(normres %>% filter(!grepl("Promoter", annot) & hit_or_match == "hit"), aes(x=annot, y=mean_normalised, fill=cat)) + 
+    geom_col(position = position_dodge(width = 0.8), width = 0.7) + 
+    theme_classic() +
+    scale_fill_manual(
+        values=annot.class.palette
+    ) + 
+    facet_grid(. ~ annot_group, scales = "free_x", space = "free_x") +
+    theme(
+        legend.position = "bottom",
+        strip.background = element_blank()
+    ) + 
+    labs(
+        y="Relative enrichment in enhancers vs promoters \n(Compared to random SNPs)",
+        x="",
+        fill = NULL
+    )
+
+ggsave(paste0(out,"/bar_enrichment_promoter_normalised.pdf"),
+         width =8, height = 5,device = cairo_pdf)
+
+# Divide by annot group
+for(g in unique(normres$annot_group)){
+    dat = normres %>% filter(!grepl("Promoter", annot) & hit_or_match == "hit", annot_group == !!(g))
+    print(g)
+    if(g == "ENCODE"){
+        ggplot(dat, aes(x=annot, y=mean_normalised, fill=cat)) + 
+        geom_col(position = position_dodge(width = 0.8), width = 0.7) + 
+        theme_classic() +
+        scale_fill_manual(
+            values=annot.class.palette
+        ) + 
+        facet_grid(. ~ annot_group, scales = "free_x", space = "free_x") +
+        theme(
+            legend.position = "bottom",
+            strip.background = element_blank()
+        ) + 
+        labs(
+            y="Relative enrichment in enhancers vs promoters \n(Compared to random SNPs)",
+            x="",
+            fill = NULL
+        )
+    } else {
+        ggplot(dat, aes(x=cat, y=mean_normalised, fill=cat)) + 
+        geom_bar(stat="identity") + 
+        theme_classic() +
+        scale_fill_manual(
+            values=annot.class.palette
+        ) + 
+        theme(
+            legend.position = "none"
+        ) + 
+        labs(
+            y="Relative enrichment in enhancers vs promoters \n(Compared to random SNPs)",
+            x="",
+            fill = NULL
+        ) + 
+        theme(axis.text.x = element_text(angle = 45, hjust = 1, size=12))
+    }
+    ggsave(paste0(out,"/bar_enrichment_promoter_normalised-", g, ".pdf"),
+            width =4*length(unique(dat$annot)), height = 5,device = cairo_pdf)   
+}

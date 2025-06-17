@@ -13,13 +13,16 @@ library(dplyr)
 args <- commandArgs(TRUE) 
 group <- gsub("\\_", "\\ ", args[1])  # group = "Cell type"
 hit_or_match = args[2] # hit_or_match="hit"
-eqtlfile="temp/output_hg19_final.tsv" # TESTING
+eqtlfile="temp/output_hg19_final.tsv"
 print(paste0("hit_or_match=", as.character(hit_or_match)))
 print(paste0("group=", group))
 infofile="snp_annotations/promoter_enhancer.counts"
 outfile=paste0("eqtl_props_out/promoter_enhancer.",gsub("\\ ", "\\-", group), ".", hit_or_match, ".enrichments")
 
 d_info=fread(infofile)
+
+# Add ENCODE enhancer ANY
+d_info$ENCODE_enhancer_any = as.numeric(d_info$ENCODE_pELS == 1 | d_info$ENCODE_dELS == 1)
 
 # Construct eqtl file from hits or matches
 if(hit_or_match == "hit"){
@@ -42,6 +45,7 @@ p0=sapply((d_info %>% select(-SNP)), function(x) length(x[x>0])/length(x) ) # ba
 for(i in 1:length(d_eqtl_list)){
   print(i)
   d_eqtl_annots=left_join(d_eqtl_list[[i]],d_info,by="SNP")
+  d_eqtl_annots = d_eqtl_annots[complete.cases(d_eqtl_annots),]
   p1=sapply(d_eqtl_annots %>% select(-SNP), function(x) length(x[x>0])/length(x) ) 
   enrichments[[i]]=data.frame(t(p1/p0))
 }
